@@ -12,12 +12,14 @@ module Projects
   ) where
 
 import Control.Monad
+import Data.Functor
 import Data.IORef
 import XMonad hiding (Screen)
 import XMonad.Actions.DynamicWorkspaces
 import XMonad.Hooks.DynamicLog
 import XMonad.StackSet
 
+import qualified Data.Sequence as S
 import qualified XMonad.Util.ExtensibleState as XS
 
 type WindowSpaceScreen
@@ -34,8 +36,9 @@ data ProjectsConfig
 
 data ProjectsState
   = ProjectsState
-      { _psConfig         :: ProjectsConfig
-      , _psCurrentProject :: Maybe ProjectId
+      { _psConfig           :: ProjectsConfig
+      , _psProjectIds       :: S.Seq ProjectId
+      , _psCurrentProjectId :: Maybe ProjectId
       }
 
   deriving (Typeable)
@@ -53,14 +56,16 @@ instance ExtensionClass MaybeProjectsState where
 initialiseProjects :: ProjectsConfig -> X ()
 initialiseProjects conf
   = XS.put $ MaybeProjectsState $ Just ProjectsState
-      { _psConfig         = conf
-      , _psCurrentProject = Nothing
+      { _psConfig           = conf
+      , _psProjectIds       = S.empty
+      , _psCurrentProjectId = Nothing
       }
 
-whenInitialised :: (ProjectsState -> X a) -> X ()
-whenInitialised f
+withProjectsState :: (ProjectsState -> X ProjectsState) -> X ()
+withProjectsState f
   = XS.get >>=
-      maybe (return ()) (void . f) . getMaybeProjectsState
+      maybe (return ()) (XS.put . MaybeProjectsState . Just <=< f) .
+        getMaybeProjectsState
 
 {-# INLINE mkWorkspaceName #-}
 mkWorkspaceName :: ProjectId -> WorkspaceId -> String
@@ -69,19 +74,25 @@ mkWorkspaceName pid wid
 
 addProject :: ProjectId -> X ()
 addProject pid
-  = whenInitialised $ \state -> do
+  = withProjectsState $ \state -> do
       let conf = _psConfig state
           wids = _pcWorkspaceIdsPerProject conf
 
       forM_ wids (addHiddenWorkspace . mkWorkspaceName pid)
 
+      let pids = _psProjectIds state
+      return state { _psProjectIds = pid S.<| pids }
+
 removeProject :: ProjectId -> X ()
 removeProject pid
-  = whenInitialised $ \state -> do
+  = withProjectsState $ \state -> do
       let conf = _psConfig state
           wids = _pcWorkspaceIdsPerProject conf
 
       forM_ wids (removeProjectWorkspace conf . mkWorkspaceName pid)
+
+      let pids = _psProjectIds state
+      return state { _psProjectIds = S.filter (/= pid) pids }
 
 removeProjectWorkspace :: ProjectsConfig -> WorkspaceId -> X ()
 removeProjectWorkspace conf wid
