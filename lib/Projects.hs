@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 
@@ -5,6 +6,7 @@ module Projects
   ( ProjectId(..)
   , ProjectsConfig(..)
 
+  , initialiseProjects
   , addProject
   , removeProject
   ) where
@@ -13,7 +15,10 @@ import Control.Monad
 import Data.IORef
 import XMonad hiding (Screen)
 import XMonad.Actions.DynamicWorkspaces
+import XMonad.Hooks.DynamicLog
 import XMonad.StackSet
+
+import qualified XMonad.Util.ExtensibleState as XS
 
 type WindowSpaceScreen
   = Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
@@ -27,20 +32,54 @@ data ProjectsConfig
       , _pcWorkspaceIdsPerProject :: [WorkspaceId]
       }
 
+data ProjectsState
+  = ProjectsState
+      { _psConfig         :: ProjectsConfig
+      , _psCurrentProject :: Maybe ProjectId
+      }
+
+  deriving (Typeable)
+
+newtype MaybeProjectsState
+  = MaybeProjectsState { getMaybeProjectsState :: Maybe ProjectsState }
+  deriving (Typeable)
+
+instance ExtensionClass MaybeProjectsState where
+  {-# INLINE initialValue #-}
+  initialValue
+    = MaybeProjectsState Nothing
+
+initialiseProjects :: ProjectsConfig -> X ()
+initialiseProjects conf
+  = do
+      XS.put $ MaybeProjectsState $ Just ProjectsState
+        { _psConfig         = conf
+        , _psCurrentProject = Nothing
+        }
+
+whenInitialised :: (ProjectsState -> X a) -> X ()
+whenInitialised f
+  = XS.get >>=
+      maybe (return ()) (void . f) . getMaybeProjectsState
+
 mkWorkspaceName :: ProjectId -> WorkspaceId -> String
 mkWorkspaceName pid wid
   = pid ++ '[' : wid ++ "]"
 
-addProject :: ProjectsConfig -> ProjectId -> X ()
-addProject conf pid
-  = do
-      let wids = _pcWorkspaceIdsPerProject conf
+addProject :: ProjectId -> X ()
+addProject pid
+  = whenInitialised $ \state -> do
+      let conf = _psConfig state
+          wids = _pcWorkspaceIdsPerProject conf
+
       forM_ wids (addHiddenWorkspace . mkWorkspaceName pid)
 
-removeProject :: ProjectsConfig -> ProjectId -> X ()
-removeProject conf pid
-  = do
-      let wids = _pcWorkspaceIdsPerProject conf
+removeProject :: ProjectId -> X ()
+removeProject pid
+  = whenInitialised $ \state -> do
+      let conf = _psConfig state
+          wids = _pcWorkspaceIdsPerProject conf
+
       forM_ wids (removeProjectWorkspace conf . mkWorkspaceName pid)
 
 removeProjectWorkspace :: ProjectsConfig -> WorkspaceId -> X ()
@@ -130,3 +169,8 @@ removeWindowSpaceFrom wid (x : xs)
       else do
         (y, ys) <- removeWindowSpaceFrom wid xs
         return (y, x : ys)
+
+projectLogString :: ProjectsConfig -> PP -> X String
+projectLogString conf pp
+  = do
+      return ""

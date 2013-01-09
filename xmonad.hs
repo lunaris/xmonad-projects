@@ -23,8 +23,8 @@ _projectsConfig
 
 _keys
   = [ ("M-g", workspacePrompt defaultXPConfig (windows . SS.greedyView))
-    , ("M-a", addProject _projectsConfig "pp")
-    , ("M-r", removeProject _projectsConfig "pp")
+    , ("M-a", addProject "pp")
+    , ("M-r", removeProject "pp")
     ]
 
 _terminal
@@ -36,6 +36,7 @@ main
       xmonad $ defaultConfig
         { borderWidth = 0
         , layoutHook  = avoidStruts (layoutHook defaultConfig)
+        , startupHook = initialiseProjects _projectsConfig
         , terminal    = _terminal
         , workspaces  = _staticWorkspaces
         } `additionalKeysP` _keys
