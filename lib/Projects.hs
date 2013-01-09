@@ -9,6 +9,8 @@ module Projects
   , initialiseProjects
   , addProject
   , removeProject
+  , selectProject
+  , withCurrentProjectNthWorkspace
   ) where
 
 import Control.Monad
@@ -21,6 +23,7 @@ import XMonad.StackSet
 
 import qualified Data.Sequence as S
 import qualified XMonad.Util.ExtensibleState as XS
+import qualified XMonad.Util.WorkspaceCompare as WC
 
 type WindowSpaceScreen
   = Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
@@ -61,11 +64,22 @@ initialiseProjects conf
       , _psCurrentProjectId = Nothing
       }
 
-withProjectsState :: (ProjectsState -> X ProjectsState) -> X ()
-withProjectsState f
+modifyProjectsState :: (ProjectsState -> X ProjectsState) -> X ()
+modifyProjectsState f
   = XS.get >>=
       maybe (return ()) (XS.put . MaybeProjectsState . Just <=< f) .
         getMaybeProjectsState
+
+withProjectsState :: (ProjectsState -> X a) -> X ()
+withProjectsState f
+  = XS.get >>= maybe (return ()) (void . f) . getMaybeProjectsState
+
+withCurrentProjectId :: (ProjectsState -> ProjectId -> X a) -> X ()
+withCurrentProjectId f
+  = withProjectsState $ \state -> do
+      case _psCurrentProjectId state of
+        Just pid  -> void (f state pid)
+        Nothing   -> return ()
 
 {-# INLINE mkWorkspaceName #-}
 mkWorkspaceName :: ProjectId -> WorkspaceId -> String
@@ -74,7 +88,7 @@ mkWorkspaceName pid wid
 
 addProject :: ProjectId -> X ()
 addProject pid
-  = withProjectsState $ \state -> do
+  = modifyProjectsState $ \state -> do
       let conf = _psConfig state
           wids = _pcWorkspaceIdsPerProject conf
 
@@ -85,14 +99,19 @@ addProject pid
 
 removeProject :: ProjectId -> X ()
 removeProject pid
-  = withProjectsState $ \state -> do
-      let conf = _psConfig state
-          wids = _pcWorkspaceIdsPerProject conf
+  = modifyProjectsState $ \state -> do
+      let conf  = _psConfig state
+          wids  = _pcWorkspaceIdsPerProject conf
 
       forM_ wids (removeProjectWorkspace conf . mkWorkspaceName pid)
 
-      let pids = _psProjectIds state
-      return state { _psProjectIds = S.filter (/= pid) pids }
+      let pids  = _psProjectIds state
+          cpid  = _psCurrentProjectId state
+
+          pids' = S.filter (/= pid) pids
+          cpid' = if cpid == Just pid then Nothing else cpid
+
+      return state { _psProjectIds = pids', _psCurrentProjectId = cpid' }
 
 removeProjectWorkspace :: ProjectsConfig -> WorkspaceId -> X ()
 removeProjectWorkspace conf wid
@@ -183,6 +202,21 @@ removeWindowSpaceFrom wid (x : xs)
       else do
         (y, ys) <- removeWindowSpaceFrom wid xs
         return (y, x : ys)
+
+selectProject :: ProjectId -> X ()
+selectProject pid
+  = modifyProjectsState $ \state -> do
+      return state { _psCurrentProjectId = Just pid }
+
+withCurrentProjectNthWorkspace  :: (WorkspaceId -> WindowSet -> WindowSet)
+                                -> Int
+                                -> X ()
+
+withCurrentProjectNthWorkspace f i
+  = withCurrentProjectId $ \state pid -> do
+      case drop i (_pcWorkspaceIdsPerProject (_psConfig state)) of
+        (wid : _) -> windows (f (mkWorkspaceName pid wid))
+        []        -> return ()
 
 projectLogString :: ProjectsConfig -> PP -> X String
 projectLogString conf pp

@@ -23,9 +23,21 @@ _projectsConfig
 
 _keys
   = [ ("M-g", workspacePrompt defaultXPConfig (windows . SS.greedyView))
-    , ("M-a", addProject "pp")
-    , ("M-r", removeProject "pp")
-    ]
+    , ("M-a p", addProject "pp")
+    , ("M-a c", addProject "crs")
+    , ("M-r p", removeProject "pp")
+    , ("M-r c", removeProject "crs")
+    , ("M-s p", selectProject "pp")
+    , ("M-s c", selectProject "crs")
+    ] ++
+
+    [ ("M-" ++ show i, withCurrentProjectNthWorkspace SS.greedyView (i - 1))
+      | i <- [1..3]
+      ] ++
+
+    [ ("M-S-" ++ show i, withCurrentProjectNthWorkspace SS.shift (i - 1))
+      | i <- [1..3]
+      ]
 
 _terminal
   = "urxvt"
