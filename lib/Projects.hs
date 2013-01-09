@@ -153,10 +153,12 @@ class HasWindowSpace a where
 
 instance HasWindowSpace WindowSpace where
   {-# INLINE getWindowSpace #-}
-  getWindowSpace = id
+  getWindowSpace
+    = id
 
   {-# INLINE putWindowSpace #-}
-  putWindowSpace = const
+  putWindowSpace
+    = const
 
 instance HasWindowSpace WindowSpaceScreen where
   {-# INLINE getWindowSpace #-}
