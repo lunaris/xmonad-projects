@@ -49,19 +49,20 @@ instance ExtensionClass MaybeProjectsState where
   initialValue
     = MaybeProjectsState Nothing
 
+{-# INLINE initialiseProjects #-}
 initialiseProjects :: ProjectsConfig -> X ()
 initialiseProjects conf
-  = do
-      XS.put $ MaybeProjectsState $ Just ProjectsState
-        { _psConfig         = conf
-        , _psCurrentProject = Nothing
-        }
+  = XS.put $ MaybeProjectsState $ Just ProjectsState
+      { _psConfig         = conf
+      , _psCurrentProject = Nothing
+      }
 
 whenInitialised :: (ProjectsState -> X a) -> X ()
 whenInitialised f
   = XS.get >>=
       maybe (return ()) (void . f) . getMaybeProjectsState
 
+{-# INLINE mkWorkspaceName #-}
 mkWorkspaceName :: ProjectId -> WorkspaceId -> String
 mkWorkspaceName pid wid
   = pid ++ '[' : wid ++ "]"
