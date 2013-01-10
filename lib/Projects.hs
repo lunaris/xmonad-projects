@@ -14,6 +14,11 @@ module Projects
 
   , PP(..)
   , defaultPP
+  , pad
+  , shorten
+  , trim
+  , wrap
+
   , projectsLog
   , projectsLogWithPP
   ) where
