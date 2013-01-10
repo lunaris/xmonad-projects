@@ -11,15 +11,24 @@ module Projects
   , removeProject
   , selectProject
   , withCurrentProjectNthWorkspace
+
+  , PP(..)
+  , defaultPP
+  , projectsLog
+  , projectsLogWithPP
   ) where
 
+import Codec.Binary.UTF8.String (encodeString)
 import Control.Monad
 import Data.Functor
-import Data.IORef
+import Data.List
+import Data.Maybe
 import XMonad hiding (Screen)
 import XMonad.Actions.DynamicWorkspaces
-import XMonad.Hooks.DynamicLog
-import XMonad.StackSet
+import XMonad.Hooks.DynamicLog (pad, shorten, trim, wrap)
+import XMonad.Hooks.UrgencyHook
+import XMonad.StackSet hiding (filter)
+import XMonad.Util.NamedWindows
 
 import qualified Data.Sequence as S
 import qualified XMonad.Util.ExtensibleState as XS
@@ -218,7 +227,86 @@ withCurrentProjectNthWorkspace f i
         (wid : _) -> windows (f (mkWorkspaceName pid wid))
         []        -> return ()
 
-projectLogString :: ProjectsConfig -> PP -> X String
-projectLogString conf pp
+data PP
+  = PP  { _ppCurrent          :: WorkspaceId -> String
+        , _ppVisible          :: WorkspaceId -> String
+        , _ppHidden           :: WorkspaceId -> String
+        , _ppHiddenNoWindows  :: WorkspaceId -> String
+        , _ppUrgent           :: WorkspaceId -> String
+        , _ppSep              :: String
+        , _ppWsSep            :: String
+        , _ppTitle            :: String -> String
+        , _ppLayout           :: String -> String
+        , _ppOrder            :: [String] -> [String]
+        , _ppSort             :: X ([WindowSpace] -> [WindowSpace])
+        , _ppExtras           :: [X (Maybe String)]
+        , _ppOutput           :: String -> IO ()
+        }
+
+defaultPP :: PP
+defaultPP
+  = PP  { _ppCurrent          = wrap "[" "]"
+        , _ppVisible          = wrap "<" ">"
+        , _ppHidden           = id
+        , _ppHiddenNoWindows  = const ""
+        , _ppUrgent           = id
+        , _ppSep              = " : "
+        , _ppWsSep            = " "
+        , _ppTitle            = shorten 80
+        , _ppLayout           = id
+        , _ppOrder            = id
+        , _ppSort             = WC.getSortByIndex
+        , _ppExtras           = []
+        , _ppOutput           = putStrLn
+        }
+
+projectsLog :: X ()
+projectsLog
+  = projectsLogWithPP defaultPP
+
+projectsLogWithPP :: PP -> X ()
+projectsLogWithPP pp
+  = projectsLogString pp >>= io . _ppOutput pp
+
+projectsLogString :: PP -> X String
+projectsLogString pp
   = do
-      return ""
+      ws <- gets windowset
+      us <- readUrgents
+      sf <- _ppSort pp
+
+      let wss = ppWindowSet sf ws us pp
+          ld  = description (layout (workspace (current ws)))
+
+      t <- maybe (return "") (fmap show . getName) (peek ws)
+      es <- mapM (flip catchX (return Nothing)) (_ppExtras pp)
+
+      return $ encodeString $ separateBy (_ppSep pp) $ _ppOrder pp $
+        [wss, _ppLayout pp ld, _ppTitle pp t] ++ catMaybes es
+
+ppWindowSet :: WC.WorkspaceSort -> WindowSet -> [Window] -> PP -> String
+ppWindowSet sf ws us pp
+  = separateBy (_ppWsSep pp) . map format . sf $
+      map workspace (current ws : visible ws) ++ hidden ws
+
+    where
+      format w  = ppWindowSpace ws us w pp (tag w)
+
+ppWindowSpace :: WindowSet
+              -> [Window]
+              -> WindowSpace
+              -> (PP -> String -> String)
+
+ppWindowSpace ws us w
+  | any (maybe False (== wid) . flip findTag ws) us = _ppUrgent
+  | wid == currentTag ws                            = _ppCurrent
+  | wid `elem` vs                                   = _ppVisible
+  | isJust (stack w)                                = _ppHidden
+  | otherwise                                       = _ppHiddenNoWindows
+  where
+    wid = tag w
+    vs = map (tag . workspace) (visible ws)
+
+separateBy :: String -> [String] -> String
+separateBy s
+  = intercalate s . filter (not . null)
