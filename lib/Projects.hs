@@ -236,6 +236,7 @@ data PP
         , _ppSep              :: String
         , _ppWsSep            :: String
         , _ppTitle            :: String -> String
+        , _ppProject          :: String -> String
         , _ppLayout           :: String -> String
         , _ppOrder            :: [String] -> [String]
         , _ppSort             :: X ([WindowSpace] -> [WindowSpace])
@@ -253,6 +254,7 @@ defaultPP
         , _ppSep              = " : "
         , _ppWsSep            = " "
         , _ppTitle            = shorten 80
+        , _ppProject          = id
         , _ppLayout           = id
         , _ppOrder            = id
         , _ppSort             = WC.getSortByIndex
@@ -275,17 +277,23 @@ projectsLogString pp
       us <- readUrgents
       sf <- _ppSort pp
 
-      let wss = ppWindowSet sf ws us pp
+
+      let wss = ppWindowSet pp sf ws us
           ld  = description (layout (workspace (current ws)))
 
+      p <- maybe "" (ppCurrentProjectId pp) . getMaybeProjectsState <$> XS.get
       t <- maybe (return "") (fmap show . getName) (peek ws)
       es <- mapM (flip catchX (return Nothing)) (_ppExtras pp)
 
       return $ encodeString $ separateBy (_ppSep pp) $ _ppOrder pp $
-        [wss, _ppLayout pp ld, _ppTitle pp t] ++ catMaybes es
+        [wss, p, _ppLayout pp ld, _ppTitle pp t] ++ catMaybes es
 
-ppWindowSet :: WC.WorkspaceSort -> WindowSet -> [Window] -> PP -> String
-ppWindowSet sf ws us pp
+ppCurrentProjectId :: PP -> ProjectsState -> String
+ppCurrentProjectId pp state
+  = maybe "" (_ppProject pp) (_psCurrentProjectId state)
+
+ppWindowSet :: PP -> WC.WorkspaceSort -> WindowSet -> [Window] -> String
+ppWindowSet pp sf ws us
   = separateBy (_ppWsSep pp) . map format . sf $
       map workspace (current ws : visible ws) ++ hidden ws
 
