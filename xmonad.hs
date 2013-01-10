@@ -1,12 +1,18 @@
+import Dzen
 import Projects
 
+import System.IO
 import XMonad
+import XMonad.Hooks.DynamicLog (dzenColor)
 import XMonad.Hooks.ManageDocks
 import XMonad.Prompt
 import XMonad.Prompt.Workspace
 import XMonad.Util.EZConfig
 
 import qualified XMonad.StackSet as SS
+
+xftFont
+  = "Monaco:pixelsize=14:antialias=true"
 
 _staticWorkspaces
   = [ "dashboard"
@@ -20,6 +26,36 @@ _projectsConfig
       { _pcDefaultWorkspaceId     = "dashboard"
       , _pcWorkspaceIdsPerProject = ["local", "remote", "gimp"]
       }
+
+dzenPP handle
+  = defaultPP { _ppCurrent          = dzenColor "#fdddef" "#353535" .
+                                        pad
+
+              , _ppVisible          = dzenColor "#fdddef" "#222222" .
+                                        pad
+
+              , _ppHidden           = dzenColor "#fdddef" "#222222" .
+                                        pad
+
+              , _ppHiddenNoWindows  = const ""
+              , _ppUrgent           = id
+              , _ppWsSep            = ""
+              , _ppSep              = ""
+              , _ppProject          = id
+
+              , _ppLayout           = dzenColor "#fdddef" "#353535" . pad
+
+
+              , _ppTitle            = const ""
+              , _ppOutput           = hPutStrLn handle
+              }
+
+leftDzen
+  = defaultDzenConfig { dzcWidth      = Just (Percent 50)
+                      , dzcFont       = Just xftFont
+                      , dzcForeground = Just "#fdddef"
+                      , dzcBackground = Just "#222222"
+                      }
 
 _keys
   = [ ("M-g", workspacePrompt defaultXPConfig (windows . SS.greedyView))
@@ -45,9 +81,12 @@ _terminal
 main :: IO ()
 main
   = do
+      leftHandle <- spawnDzen leftDzen
+
       xmonad $ defaultConfig
         { borderWidth = 0
         , layoutHook  = avoidStruts (layoutHook defaultConfig)
+        , logHook     = projectsLogWithPP (dzenPP leftHandle)
         , startupHook = initialiseProjects _projectsConfig
         , terminal    = _terminal
         , workspaces  = _staticWorkspaces
