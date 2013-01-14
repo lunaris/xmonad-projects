@@ -82,7 +82,8 @@ modifyProjectsState :: (ProjectsState -> X ProjectsState) -> X ()
 modifyProjectsState f
   = XS.get >>=
       maybe (return ()) (XS.put . MaybeProjectsState . Just <=< f) .
-        getMaybeProjectsState
+        getMaybeProjectsState >>
+          runLogHook
 
 withProjectsState :: (ProjectsState -> X a) -> X ()
 withProjectsState f
@@ -99,6 +100,10 @@ withCurrentProjectId f
 mkWorkspaceName :: ProjectId -> WorkspaceId -> String
 mkWorkspaceName pid wid
   = pid ++ '[' : wid ++ "]"
+
+runLogHook :: X ()
+runLogHook
+  = asks (logHook . config) >>= userCodeDef ()
 
 addProject :: ProjectId -> X ()
 addProject pid
@@ -281,7 +286,6 @@ projectsLogString pp
       ws <- gets windowset
       us <- readUrgents
       sf <- _ppSort pp
-
 
       let wss = ppWindowSet pp sf ws us
           ld  = description (layout (workspace (current ws)))
