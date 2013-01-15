@@ -92,7 +92,7 @@ _keys
       | i <- [1..5], (m, f) <- [("", SS.greedyView), ("S-", SS.shift)]
       ] ++
 
-    [ ("M-" ++ m ++ show i, windows (f i))
+    [ ("M-" ++ m ++ i, windows (f i))
       | i <- _staticWorkspaces, (m, f) <- [("", SS.greedyView), ("S-", SS.shift)]
       ]
 
