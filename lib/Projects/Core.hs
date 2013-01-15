@@ -12,6 +12,7 @@ import XMonad.Actions.DynamicWorkspaces
 import XMonad.Hooks.UrgencyHook
 import XMonad.StackSet
 
+import qualified Data.Foldable as F
 import qualified Data.Sequence as S
 import qualified XMonad.Util.ExtensibleState as XS
 
@@ -107,6 +108,11 @@ splitProjectWorkspaceName wid
 isProjectWorkspaceName :: WorkspaceId -> Bool
 isProjectWorkspaceName
   = isPrefixOf projectWorkspaceNamePrefix
+
+{-# INLINE getProjects #-}
+getProjects :: X [ProjectId]
+getProjects
+  = withProjectsState (return []) (return . F.toList . _psProjectIds)
 
 addProject :: ProjectId -> X ()
 addProject pid

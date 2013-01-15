@@ -74,15 +74,15 @@ _dmenuArguments
     ]
 
 _keys
-  = [ ("M-a", addProjectMenu "dmenu" _dmenuArguments)
-    , ("M-s", selectProjectMenu "dmenu" _dmenuArguments)
-    , ("M-d", removeProjectMenu "dmenu" _dmenuArguments)
+  = [ ("M4-a", addProjectMenu "dmenu" _dmenuArguments)
+    , ("M4-s", selectProjectMenu "dmenu" _dmenuArguments)
+    , ("M4-d", removeProjectMenu "dmenu" _dmenuArguments)
 
     , ("M-g", workspacePrompt defaultXPConfig (windows . SS.greedyView))
 
     , ("M-b", sendMessage ToggleStruts)
     , ("M-p", safeSpawn "dmenu_run" _dmenuArguments)
-    , ("M-S-s", safeSpawn "/home/will/.dzen/conch" (_terminal : _dmenuArguments))
+    , ("M-s", safeSpawn "/home/will/.dzen/conch" (_terminal : _dmenuArguments))
 
     , ("M4-f", spawn $
         "google-chrome --disk-cache-dir=\"/tmp/google-chrome-cache\" " ++

@@ -3,6 +3,7 @@ module Projects
   , ProjectsConfig(..)
 
   , initialiseProjects
+  , getProjects
   , addProject
   , removeProject
   , selectProject
