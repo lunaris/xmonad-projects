@@ -78,6 +78,10 @@ initialiseProjects conf
       , _psCurrentProjectId = Nothing
       }
 
+runLogHook :: X ()
+runLogHook
+  = asks (logHook . config) >>= userCodeDef ()
+
 modifyProjectsState :: (ProjectsState -> X ProjectsState) -> X ()
 modifyProjectsState f
   = XS.get >>=
@@ -100,10 +104,6 @@ withCurrentProjectId f
 mkWorkspaceName :: ProjectId -> WorkspaceId -> String
 mkWorkspaceName pid wid
   = pid ++ '[' : wid ++ "]"
-
-runLogHook :: X ()
-runLogHook
-  = asks (logHook . config) >>= userCodeDef ()
 
 addProject :: ProjectId -> X ()
 addProject pid
