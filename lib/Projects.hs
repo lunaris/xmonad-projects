@@ -310,23 +310,27 @@ projectsLogWithPP pp
 
 projectsLogString :: PP -> X String
 projectsLogString pp
-  = withProjectsState (return "") $ \state ->
-      do
-        ws <- gets windowset
-        us <- readUrgents
-        sf <- _ppSort pp
+  = do
+      ws <- gets windowset
+      us <- readUrgents
+      sf <- _ppSort pp
 
-        let mpid = _psCurrentProjectId state
+      let ppWs  = ppWindowSet pp sf ws us
+          ld    = description (layout (workspace (current ws)))
 
-        let wss = ppWindowSet pp sf ws us mpid
-            ld  = description (layout (workspace (current ws)))
-            p   = maybe "" (_ppProject pp) mpid
+      (wss, p) <- withProjectsState (return (ppWs Nothing, "")) $
+        \state ->
+          let mpid  = _psCurrentProjectId state
+              wss   = ppWindowSet pp sf ws us mpid
+              p     = maybe "" (_ppProject pp) mpid
 
-        t <- maybe (return "") (fmap show . getName) (peek ws)
-        es <- mapM (flip catchX (return Nothing)) (_ppExtras pp)
+          in  return (wss, p)
 
-        return $ encodeString $ separateBy (_ppSep pp) $ _ppOrder pp $
-          [wss, p, _ppLayout pp ld, _ppTitle pp t] ++ catMaybes es
+      t <- maybe (return "") (fmap show . getName) (peek ws)
+      es <- mapM (flip catchX (return Nothing)) (_ppExtras pp)
+
+      return $ encodeString $ separateBy (_ppSep pp) $ _ppOrder pp $
+        [wss, p, _ppLayout pp ld, _ppTitle pp t] ++ catMaybes es
 
 ppCurrentProjectId :: PP -> ProjectsState -> String
 ppCurrentProjectId pp state
