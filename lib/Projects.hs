@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 
 module Projects
@@ -89,21 +90,48 @@ modifyProjectsState f
         getMaybeProjectsState >>
           runLogHook
 
-withProjectsState :: (ProjectsState -> X a) -> X ()
-withProjectsState f
-  = XS.get >>= maybe (return ()) (void . f) . getMaybeProjectsState
+withProjectsState :: X a -> (ProjectsState -> X a) -> X a
+withProjectsState m f
+  = XS.get >>= maybe m f . getMaybeProjectsState
+
+{-# INLINE withProjectsState_ #-}
+withProjectsState_ :: (ProjectsState -> X a) -> X ()
+withProjectsState_ f
+  = withProjectsState (return ()) (void . f)
 
 withCurrentProjectId :: (ProjectsState -> ProjectId -> X a) -> X ()
 withCurrentProjectId f
-  = withProjectsState $ \state -> do
+  = withProjectsState_ $ \state -> do
       case _psCurrentProjectId state of
         Just pid  -> void (f state pid)
         Nothing   -> return ()
 
-{-# INLINE mkWorkspaceName #-}
-mkWorkspaceName :: ProjectId -> WorkspaceId -> String
-mkWorkspaceName pid wid
-  = pid ++ '[' : wid ++ "]"
+{-# INLINE projectWorkspaceNamePrefix #-}
+projectWorkspaceNamePrefix :: String
+projectWorkspaceNamePrefix
+  = "//project//"
+
+{-# INLINE mkProjectWorkspaceName #-}
+mkProjectWorkspaceName :: ProjectId -> WorkspaceId -> WorkspaceId
+mkProjectWorkspaceName pid wid
+  = projectWorkspaceNamePrefix ++ pid ++ "//" ++ wid
+
+splitProjectWorkspaceName :: WorkspaceId -> Maybe (ProjectId, WorkspaceId)
+splitProjectWorkspaceName wid
+  = do
+      pidWid <- stripPrefix projectWorkspaceNamePrefix wid
+
+      let f c1 c2
+            = (c1 /= '/' && c2 /= '/') || (c1 == '/' && c2 == '/')
+
+      case groupBy f pidWid of
+        [pid, _, wid] -> Just (pid, wid)
+        _             -> Nothing
+
+{-# INLINE isProjectWorkspaceName #-}
+isProjectWorkspaceName :: WorkspaceId -> Bool
+isProjectWorkspaceName
+  = isPrefixOf projectWorkspaceNamePrefix
 
 addProject :: ProjectId -> X ()
 addProject pid
@@ -111,7 +139,7 @@ addProject pid
       let conf = _psConfig state
           wids = _pcWorkspaceIdsPerProject conf
 
-      forM_ wids (addHiddenWorkspace . mkWorkspaceName pid)
+      forM_ wids (addHiddenWorkspace . mkProjectWorkspaceName pid)
 
       let pids = _psProjectIds state
       return state { _psProjectIds = pid S.<| pids }
@@ -122,7 +150,7 @@ removeProject pid
       let conf  = _psConfig state
           wids  = _pcWorkspaceIdsPerProject conf
 
-      forM_ wids (removeProjectWorkspace conf . mkWorkspaceName pid)
+      forM_ wids (removeProjectWorkspace conf . mkProjectWorkspaceName pid)
 
       let pids  = _psProjectIds state
           cpid  = _psCurrentProjectId state
@@ -234,7 +262,7 @@ withCurrentProjectNthWorkspace  :: (WorkspaceId -> WindowSet -> WindowSet)
 withCurrentProjectNthWorkspace f i
   = withCurrentProjectId $ \state pid -> do
       case drop i (_pcWorkspaceIdsPerProject (_psConfig state)) of
-        (wid : _) -> windows (f (mkWorkspaceName pid wid))
+        (wid : _) -> windows (f (mkProjectWorkspaceName pid wid))
         []        -> return ()
 
 data PP
@@ -282,32 +310,55 @@ projectsLogWithPP pp
 
 projectsLogString :: PP -> X String
 projectsLogString pp
-  = do
-      ws <- gets windowset
-      us <- readUrgents
-      sf <- _ppSort pp
+  = withProjectsState (return "") $ \state ->
+      do
+        ws <- gets windowset
+        us <- readUrgents
+        sf <- _ppSort pp
 
-      let wss = ppWindowSet pp sf ws us
-          ld  = description (layout (workspace (current ws)))
+        let mpid = _psCurrentProjectId state
 
-      p <- maybe "" (ppCurrentProjectId pp) . getMaybeProjectsState <$> XS.get
-      t <- maybe (return "") (fmap show . getName) (peek ws)
-      es <- mapM (flip catchX (return Nothing)) (_ppExtras pp)
+        let wss = ppWindowSet pp sf ws us mpid
+            ld  = description (layout (workspace (current ws)))
+            p   = maybe "" (_ppProject pp) mpid
 
-      return $ encodeString $ separateBy (_ppSep pp) $ _ppOrder pp $
-        [wss, p, _ppLayout pp ld, _ppTitle pp t] ++ catMaybes es
+        t <- maybe (return "") (fmap show . getName) (peek ws)
+        es <- mapM (flip catchX (return Nothing)) (_ppExtras pp)
+
+        return $ encodeString $ separateBy (_ppSep pp) $ _ppOrder pp $
+          [wss, p, _ppLayout pp ld, _ppTitle pp t] ++ catMaybes es
 
 ppCurrentProjectId :: PP -> ProjectsState -> String
 ppCurrentProjectId pp state
   = maybe "" (_ppProject pp) (_psCurrentProjectId state)
 
-ppWindowSet :: PP -> WC.WorkspaceSort -> WindowSet -> [Window] -> String
-ppWindowSet pp sf ws us
+ppWindowSet :: PP
+            -> WC.WorkspaceSort
+            -> WindowSet
+            -> [Window]
+            -> Maybe ProjectId
+            -> String
+
+ppWindowSet pp sf ws us mpid
   = separateBy (_ppWsSep pp) . map format . sf $
-      map workspace (current ws : visible ws) ++ hidden ws
+      foldr (prune . workspace) [] (current ws : visible ws) ++
+        foldr prune [] (hidden ws)
 
     where
-      format w  = ppWindowSpace ws us w pp (tag w)
+      format w  = ppWindowSpace ws us w pp
+                    (maybe wid snd (splitProjectWorkspaceName wid))
+
+                    where
+                      wid = tag w
+
+      prune     = case mpid of
+                    Just cpid -> \w ->
+                      case splitProjectWorkspaceName (tag w) of
+                        Just (pid, wid')  -> if pid == cpid then (w :) else id
+                        Nothing           -> (w :)
+
+                    Nothing -> \w ->
+                      if isProjectWorkspaceName (tag w) then id else (w :)
 
 ppWindowSpace :: WindowSet
               -> [Window]
