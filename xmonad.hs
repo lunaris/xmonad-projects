@@ -1,5 +1,6 @@
 import Dzen
 import Projects
+import Projects.Dmenu
 
 import System.IO
 import XMonad
@@ -7,6 +8,7 @@ import XMonad.Hooks.DynamicLog (dzenColor)
 import XMonad.Hooks.ManageDocks
 import XMonad.Prompt
 import XMonad.Prompt.Workspace
+import XMonad.Util.Dmenu
 import XMonad.Util.EZConfig
 import XMonad.Util.Run (safeSpawn, spawnPipe)
 
@@ -72,13 +74,15 @@ _dmenuArguments
     ]
 
 _keys
-  = [ ("M-a a", addProject "")
-    , ("M-a s", selectProject "")
-    , ("M-a d", removeProject "")
+  = [ ("M-a", addProjectMenu "dmenu" _dmenuArguments)
+    , ("M-s", selectProjectMenu "dmenu" _dmenuArguments)
+    , ("M-d", removeProjectMenu "dmenu" _dmenuArguments)
+
+    , ("M-g", workspacePrompt defaultXPConfig (windows . SS.greedyView))
 
     , ("M-b", sendMessage ToggleStruts)
     , ("M-p", safeSpawn "dmenu_run" _dmenuArguments)
-    , ("M-s", safeSpawn "/home/will/.dzen/conch" (_terminal : _dmenuArguments))
+    , ("M-S-s", safeSpawn "/home/will/.dzen/conch" (_terminal : _dmenuArguments))
 
     , ("M4-f", spawn $
         "google-chrome --disk-cache-dir=\"/tmp/google-chrome-cache\" " ++
@@ -105,11 +109,14 @@ main
       lh <- spawnDzen _leftDzen
       spawnToDzen "conky -c ~/.dzen/conky" _rightDzen
 
-      xmonad $ defaultConfig
-        { borderWidth = 0
-        , layoutHook  = avoidStruts (layoutHook defaultConfig)
-        , logHook     = projectsLogWithPP (_dzenPP lh)
-        , startupHook = initialiseProjects _projectsConfig
-        , terminal    = _terminal
-        , workspaces  = _staticWorkspaces
-        } `additionalKeysP` _keys
+      let config
+            = defaultConfig
+                { borderWidth = 0
+                , layoutHook  = avoidStruts (layoutHook defaultConfig)
+                , logHook     = projectsLogWithPP (_dzenPP lh)
+                , startupHook = initialiseProjects _projectsConfig >> checkKeymap config _keys
+                , terminal    = _terminal
+                , workspaces  = _staticWorkspaces
+                }
+
+      xmonad $ config `additionalKeysP` _keys
