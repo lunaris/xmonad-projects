@@ -74,9 +74,9 @@ _dmenuArguments
     ]
 
 _keys
-  = [ ("M4-a", addProjectMenu "dmenu" _dmenuArguments)
-    , ("M4-s", selectProjectMenu "dmenu" _dmenuArguments)
-    , ("M4-d", removeProjectMenu "dmenu" _dmenuArguments)
+  = [ ("M4-a", addProjectDmenu _dmenuArguments)
+    , ("M4-s", selectProjectDmenu _dmenuArguments)
+    , ("M4-d", removeProjectDmenu _dmenuArguments)
 
     , ("M-g", workspacePrompt defaultXPConfig (windows . SS.greedyView))
 
